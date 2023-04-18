@@ -2,17 +2,17 @@ package com.example.workouttimer;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
-import java.sql.Time;
-import java.util.Objects;
-import java.util.function.LongToIntFunction;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -25,6 +25,7 @@ public class MainActivity extends AppCompatActivity {
     int amount;
     String text;
     boolean started = false, stopped = false;
+    SharedPreferences sharedPref;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,12 +45,15 @@ public class MainActivity extends AppCompatActivity {
         start.setText(text);
         text = "Stop";
         stop.setText(text);
+        sharedPref = getSharedPreferences("MY_PREF", Context.MODE_PRIVATE);
 
         start.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 // start timer
                 start.setClickable(false);
+                SharedPreferences.Editor prefEditor = sharedPref.edit();
+                startForegroundService(new Intent(MainActivity.this, ForegroundService.class));
                 if (!started) {
                     amount = sets.getText().toString().length() != 0 ? Integer.parseInt(sets.getText().toString()) : 3;
                     started = true;
@@ -58,6 +62,9 @@ public class MainActivity extends AppCompatActivity {
                     timerLength = workout.getText().toString().length() != 0 ? Long.parseLong(workout.getText().toString()) : 60;
                     progress.setMax((int) timerLength);
                     progress.setProgress(0);
+                    prefEditor.putInt("max", progress.getMax());
+                    prefEditor.putInt("progress", progress.getProgress());
+                    prefEditor.apply();
                 } else {
                     stopped = false;
                     text = "Stop";
@@ -65,34 +72,49 @@ public class MainActivity extends AppCompatActivity {
                 }
                 text = "Workout";
                 identifier.setText(text);
+                prefEditor.putString("id", text);
+                prefEditor.apply();
                 timer = new CountDownTimer(timerLength * 1000, 1000) {
                     @Override
                     public void onTick(long millisUntilFinished) {
                         text = millisUntilFinished / 60000 + ":" + ((millisUntilFinished % 60000) > 9999 ? (millisUntilFinished % 60000) / 1000 : ("0" + (millisUntilFinished % 60000) / 1000));
                         timerText.setText(text);
                         progress.setProgress(progress.getProgress() + 1);
+                        prefEditor.putString("timer", text);
+                        prefEditor.putInt("progress", progress.getProgress());
+                        prefEditor.apply();
                         timerLength = millisUntilFinished / 1000;
                     }
 
                     @Override
                     public void onFinish() {
+                        v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                         // rest
                         timerLength = rest.getText().toString().length() != 0 ? Long.parseLong(rest.getText().toString()) : 20;
                         progress.setProgress(0);
                         progress.setMax((int) timerLength);
+                        prefEditor.putInt("max", progress.getMax());
+                        prefEditor.putInt("progress", progress.getProgress());
+                        prefEditor.apply();
                         text = "Rest";
                         identifier.setText(text);
+                        prefEditor.putString("id", text);
+                        prefEditor.apply();
                         timer = new CountDownTimer(timerLength * 1000, 1000) {
                             @Override
                             public void onTick(long millisUntilFinished) {
                                 text = millisUntilFinished / 60000 + ":" + ((millisUntilFinished % 60000) > 9999 ? (millisUntilFinished % 60000) / 1000 : ("0" + (millisUntilFinished % 60000) / 1000));
                                 timerText.setText(text);
                                 progress.setProgress(progress.getProgress() + 1);
+                                prefEditor.putString("timer", text);
+                                prefEditor.putInt("progress", progress.getProgress());
+                                prefEditor.apply();
                                 timerLength = millisUntilFinished / 1000;
                             }
 
                             @Override
                             public void onFinish() {
+                                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                                 // repeat if more than one set
                                 if (amount > 1) {
                                     amount -= 1;
@@ -100,9 +122,13 @@ public class MainActivity extends AppCompatActivity {
                                 } else {
                                     text = "Finished";
                                     identifier.setText(text);
+                                    prefEditor.putString("id", text);
+                                    prefEditor.apply();
                                     text = "Restart";
                                     start.setText(text);
                                     start.setClickable(true);
+                                    Intent i = new Intent(MainActivity.this, ForegroundService.class);
+                                    stopService(i);
                                 }
                             }
                         };
@@ -113,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        stop.setOnClickListener(new View.OnClickListener() {
+         stop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 // stop timer
@@ -126,19 +152,12 @@ public class MainActivity extends AppCompatActivity {
                     stopped = true;
                     timer.cancel();
                 } else {
-                    timer.cancel();
-                    text = "0:00";
-                    timerText.setText(text);
-                    text = "Finished";
-                    identifier.setText(text);
-                    text = "Restart";
-                    start.setText(text);
-                    text = "Stop";
-                    stop.setText(text);
-                    progress.setProgress(0);
-                    start.setClickable(true);
-                    started = false;
+                    Intent reset = new Intent(MainActivity.this, MainActivity.class);
+                    reset.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    startActivity(reset);
                 }
+                Intent i = new Intent(MainActivity.this, ForegroundService.class);
+                stopService(i);
             }
         });
     }
